@@ -1,6 +1,12 @@
+using Sevriukoff.AsciiArena.CommonLib;
+
 namespace Sevriukoff.AsciiArena.Client;
 
-public class INetworkClient
+public interface INetworkClient : IDisposable
 {
+    Task ConnectAsync();
     
+    Task SendCommandAsync(CommandMessage command);
+    
+    event Action<GameState?> OnGameStateReceived;
 }

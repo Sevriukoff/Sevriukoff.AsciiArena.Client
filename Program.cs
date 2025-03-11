@@ -1,46 +1,58 @@
 ﻿using System.Net.Sockets;
 using System.Text;
+using System.Text.Json;
+using Autofac;
+using SadConsole;
+using Game = SadConsole.Game;
+using Settings = SadConsole.Settings;
+using Sevriukoff.AsciiArena.CommonLib;
+using Console = System.Console;
 
 namespace Sevriukoff.AsciiArena.Client;
 
 class Program
 {
-    private const string ServerIp = "127.0.0.1";
-    private const int Port = 8080;
+    private static INetworkClient _networkClient;
     
     static async Task Main(string[] args)
     {
-        try
+        var builder = new ContainerBuilder();
+        
+        builder.RegisterType<NetworkClient>()
+            .As<INetworkClient>()
+            .WithParameter("serverIp", "127.0.0.1")
+            .WithParameter("port", 5000)
+            .SingleInstance();
+        
+        var container = builder.Build();
+
+        _networkClient = container.Resolve<INetworkClient>();
+        await _networkClient.ConnectAsync();
+        
+        _networkClient.OnGameStateReceived += (gameState) =>
         {
-            var client = new TcpClient();
-            await client.ConnectAsync(ServerIp, Port);
-            Console.WriteLine("Подключено к серверу.");
+            //Console.WriteLine($"Player {gameState.PlayerId} at ({gameState.PlayerX}, {gameState.PlayerY})");
+        };
+        
+        Settings.WindowTitle = "ASCII Arena Client";
+        Game.Create(80, 25, GameUserInterfaceStartUp);
+        Game.Instance.Run();
+        Game.Instance.Dispose();
 
-            var stream = client.GetStream();
+        _networkClient.Dispose();
+    }
 
-            var message = "Hello, server!";
-            var data = Encoding.UTF8.GetBytes(message);
-            await stream.WriteAsync(data);
-            Console.WriteLine($"Отправлено: {message}");
-
-            var buffer = new byte[1024];
-            
-            while (true)
-            {
-                var bytesRead = await stream.ReadAsync(buffer);
-                
-                if (bytesRead == 0)
-                    break;
-                
-                var response = Encoding.UTF8.GetString(buffer, 0, bytesRead);
-                Console.WriteLine("Received: " + response);
-            }
-
-            client.Close();
-        }
-        catch (Exception ex)
+    private static void GameUserInterfaceStartUp(object? sender, GameHost e)
+    {
+        var loginWindow = new LoginWindow(_networkClient);
+        
+        loginWindow.OnLoginSuccess += (response) =>
         {
-            Console.WriteLine("Ошибка: " + ex.Message);
-        }
+            Console.WriteLine("Login successful! Player: " + response.Player);
+            // Здесь можно переключиться на основной игровой экран.
+        };
+        
+        Game.Instance.Screen = loginWindow;
+        Game.Instance.Screen.IsFocused = true;
     }
 }
